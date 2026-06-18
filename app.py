@@ -3,6 +3,7 @@ import logging
 import os
 from pathlib import Path
 from typing import Literal
+import hashlib
 
 import joblib
 import pandas as pd
@@ -16,8 +17,42 @@ load_dotenv()
 
 API_TOKEN = os.getenv("API_TOKEN")
 MODEL_PATH = Path("artifacts/model.pkl")
+CHECKSUM_PATH = Path("artifacts/model.pkl.sha256")
 FEATURE_COLUMNS_PATH = Path("artifacts/feature_columns.json")
 api_key_header = APIKeyHeader(name="X-API-Token", auto_error=False)
+
+
+
+def _verify_model_integrity(model_path: Path, checksum_path: Path) -> None:
+    """Vérifie l'intégrité du fichier modèle via son checksum SHA-256.
+
+    Lève une RuntimeError si le fichier de checksum est absent ou si le
+    hash calculé ne correspond pas au hash attendu.
+    """
+    if not checksum_path.exists():
+        raise RuntimeError(
+            f"Fichier de checksum introuvable : {checksum_path}. "
+            "Le modèle ne peut pas être chargé sans vérification d'intégrité."
+        )
+
+    expected = checksum_path.read_text(encoding="utf-8").strip()
+
+    h = hashlib.sha256()
+    with open(model_path, "rb") as f:
+        for chunk in iter(lambda: f.read(65536), b""):
+            h.update(chunk)
+    actual = h.hexdigest()
+
+    if actual != expected:
+        raise RuntimeError(
+            f"Échec de la vérification d'intégrité du modèle : "
+            f"hash attendu={expected}, hash calculé={actual}. "
+            "L'artefact a peut-être été altéré ou remplacé."
+        )
+
+
+
+
 
 metrics = {
     "n_predictions": 0,
@@ -31,6 +66,7 @@ model = None
 feature_columns = []
 
 try:
+    _verify_model_integrity(MODEL_PATH, CHECKSUM_PATH)
     model = joblib.load(MODEL_PATH)
     with open(FEATURE_COLUMNS_PATH, "r", encoding="utf-8") as f:
         feature_columns = json.load(f)
