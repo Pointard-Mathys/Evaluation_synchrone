@@ -33,7 +33,7 @@ pip install -r requirements.txt
 Creer un fichier `.env` a la racine du projet a partir de `.env_Exemple` :
 
 ```env
-API_TOKEN=churn-demo-token
+API_TOKEN=Votre_clé
 ```
 
 Le token est obligatoire pour les routes protegees :
@@ -104,7 +104,7 @@ Si le modele ou les colonnes ne sont pas disponibles, l'API retourne HTTP `503`.
 ```bash
 curl -X POST http://127.0.0.1:8001/predict ^
   -H "Content-Type: application/json" ^
-  -H "X-API-Token: churn-demo-token" ^
+  -H "X-API-Token: Votre_clé" ^
   -d "{\"tenure_months\":12,\"monthly_charges\":75.5,\"total_charges\":906.0,\"contract\":\"Month-to-month\"}"
 ```
 
@@ -125,7 +125,7 @@ La route `/predict_batch` accepte jusqu'a 100 entrees.
 ```bash
 curl -X POST http://127.0.0.1:8001/predict_batch ^
   -H "Content-Type: application/json" ^
-  -H "X-API-Token: churn-demo-token" ^
+  -H "X-API-Token: Votre_clé" ^
   -d "{\"inputs\":[{\"tenure_months\":12,\"monthly_charges\":75.5,\"total_charges\":906.0,\"contract\":\"Month-to-month\"},{\"tenure_months\":24,\"monthly_charges\":90.0,\"total_charges\":2160.0,\"contract\":\"One year\"}]}"
 ```
 
@@ -157,7 +157,7 @@ Si une entree est invalide, toute la requete echoue avec HTTP `422` et l'index d
 
 ```bash
 curl http://127.0.0.1:8001/metrics ^
-  -H "X-API-Token: churn-demo-token"
+  -H "X-API-Token: Votre_clé"
 ```
 
 Exemple de reponse :
@@ -272,7 +272,7 @@ Verifier une prediction avec token :
 ```bash
 curl -X POST http://127.0.0.1:8001/predict ^
   -H "Content-Type: application/json" ^
-  -H "X-API-Token: churn-demo-token" ^
+  -H "X-API-Token: Votre_clé" ^
   -d "{\"tenure_months\":12,\"monthly_charges\":75.5,\"total_charges\":906.0,\"contract\":\"Month-to-month\"}"
 ```
 
@@ -281,7 +281,7 @@ Verifier une prediction batch valide :
 ```bash
 curl -X POST http://127.0.0.1:8001/predict_batch ^
   -H "Content-Type: application/json" ^
-  -H "X-API-Token: churn-demo-token" ^
+  -H "X-API-Token: Votre_clé" ^
   -d "{\"inputs\":[{\"tenure_months\":12,\"monthly_charges\":75.5,\"total_charges\":906.0,\"contract\":\"Month-to-month\"},{\"tenure_months\":24,\"monthly_charges\":90.0,\"total_charges\":2160.0,\"contract\":\"One year\"}]}"
 ```
 
@@ -289,14 +289,14 @@ Verifier les metriques :
 
 ```bash
 curl http://127.0.0.1:8001/metrics ^
-  -H "X-API-Token: churn-demo-token"
+  -H "X-API-Token: Votre_clé"
 ```
 
 Verifier le rejet d'un batch trop volumineux depuis `cmd.exe` :
 
 ```cmd
 powershell -NoProfile -Command "$body = @{ inputs = @(1..101 | ForEach-Object { @{ tenure_months = 12; monthly_charges = 75.5; total_charges = 906.0; contract = 'Month-to-month' } }) } | ConvertTo-Json -Depth 5; Set-Content -Path batch_101.json -Value $body -Encoding UTF8"
-curl.exe -X POST http://127.0.0.1:8001/predict_batch -H "Content-Type: application/json" -H "X-API-Token: churn-demo-token" --data-binary @batch_101.json
+curl.exe -X POST http://127.0.0.1:8001/predict_batch -H "Content-Type: application/json" -H "X-API-Token: Votre_clé" --data-binary @batch_101.json
 ```
 
 La reponse attendue est HTTP `413` :
