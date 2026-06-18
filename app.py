@@ -57,6 +57,8 @@ def _verify_model_integrity(model_path: Path, checksum_path: Path) -> None:
 metrics = {
     "n_predictions": 0,
     "n_errors": 0,
+    "n_batch_requests": 0,
+    "n_batch_inputs_total": 0,
 }
 
 logging.basicConfig(level=logging.INFO)
@@ -195,6 +197,7 @@ def predict_batch(payload: dict = Body(...)):
         )
 
     if len(inputs) > 100:
+        logger.warning("batch_rejected_size=%s max_size=100", len(inputs))
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
             detail="Batch size is limited to 100 inputs",
@@ -216,8 +219,10 @@ def predict_batch(payload: dict = Body(...)):
 
     try:
         predictions = [_predict_customer(item) for item in validated_inputs]
+        metrics["n_batch_requests"] += 1
+        metrics["n_batch_inputs_total"] += len(validated_inputs)
         metrics["n_predictions"] += len(predictions)
-        logger.info("batch_predictions=%s", len(predictions))
+        logger.info("batch_request_processed n_inputs=%s", len(validated_inputs))
 
         return {"predictions": predictions, "n_inputs": len(validated_inputs)}
     except Exception as e:

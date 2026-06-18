@@ -99,9 +99,21 @@ def test_metrics_rejects_invalid_token(monkeypatch):
     assert response.status_code == 401
 
 
+def test_metrics_exposes_batch_counters(monkeypatch):
+    monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
+
+    response = client.get("/metrics", headers=AUTH_HEADERS)
+
+    assert response.status_code == 200
+    assert "n_batch_requests" in response.json()
+    assert "n_batch_inputs_total" in response.json()
+
+
 def test_predict_batch_valid_input(monkeypatch):
     monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
     monkeypatch.setattr(api_app, "model", DummyModel())
+    monkeypatch.setitem(api_app.metrics, "n_batch_requests", 0)
+    monkeypatch.setitem(api_app.metrics, "n_batch_inputs_total", 0)
     monkeypatch.setattr(
         api_app,
         "feature_columns",
@@ -137,9 +149,11 @@ def test_predict_batch_valid_input(monkeypatch):
     assert response.json()["n_inputs"] == 2
     assert len(response.json()["predictions"]) == 2
     assert response.json()["predictions"][0]["prediction"] == 0
+    assert api_app.metrics["n_batch_requests"] == 1
+    assert api_app.metrics["n_batch_inputs_total"] == 2
 
 
-def test_predict_batch_rejects_more_than_100_inputs(monkeypatch):
+def test_predict_batch_rejects_more_than_100_inputs(monkeypatch, caplog):
     monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
     monkeypatch.setattr(api_app, "model", DummyModel())
 
@@ -156,6 +170,7 @@ def test_predict_batch_rejects_more_than_100_inputs(monkeypatch):
     )
 
     assert response.status_code == 413
+    assert "batch_rejected_size=101 max_size=100" in caplog.text
 
 
 def test_predict_batch_reports_invalid_input_index(monkeypatch):
