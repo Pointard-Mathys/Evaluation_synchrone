@@ -97,3 +97,90 @@ def test_metrics_rejects_invalid_token(monkeypatch):
     response = client.get("/metrics", headers={"X-API-Token": "wrong-token"})
 
     assert response.status_code == 401
+
+
+def test_predict_batch_valid_input(monkeypatch):
+    monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
+    monkeypatch.setattr(api_app, "model", DummyModel())
+    monkeypatch.setattr(
+        api_app,
+        "feature_columns",
+        [
+            "tenure_months",
+            "monthly_charges",
+            "total_charges",
+            "contract_One year",
+            "contract_Two year",
+        ],
+    )
+
+    payload = {
+        "inputs": [
+            {
+                "tenure_months": 12,
+                "monthly_charges": 75.5,
+                "total_charges": 906.0,
+                "contract": "Month-to-month",
+            },
+            {
+                "tenure_months": 24,
+                "monthly_charges": 90.0,
+                "total_charges": 2160.0,
+                "contract": "One year",
+            },
+        ]
+    }
+
+    response = client.post("/predict_batch", json=payload, headers=AUTH_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json()["n_inputs"] == 2
+    assert len(response.json()["predictions"]) == 2
+    assert response.json()["predictions"][0]["prediction"] == 0
+
+
+def test_predict_batch_rejects_more_than_100_inputs(monkeypatch):
+    monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
+    monkeypatch.setattr(api_app, "model", DummyModel())
+
+    item = {
+        "tenure_months": 12,
+        "monthly_charges": 75.5,
+        "total_charges": 906.0,
+        "contract": "Month-to-month",
+    }
+    response = client.post(
+        "/predict_batch",
+        json={"inputs": [item] * 101},
+        headers=AUTH_HEADERS,
+    )
+
+    assert response.status_code == 413
+
+
+def test_predict_batch_reports_invalid_input_index(monkeypatch):
+    monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
+    monkeypatch.setattr(api_app, "model", DummyModel())
+
+    payload = {
+        "inputs": [
+            {
+                "tenure_months": 12,
+                "monthly_charges": 75.5,
+                "total_charges": 906.0,
+                "contract": "Month-to-month",
+            },
+            {
+                "tenure_months": -1,
+                "monthly_charges": 90.0,
+                "total_charges": 2160.0,
+                "contract": "One year",
+            },
+        ]
+    }
+
+    response = client.post("/predict_batch", json=payload, headers=AUTH_HEADERS)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["index"] == 1
+    assert "Invalid input at index 1" in response.json()["detail"]["message"]

@@ -6,3 +6,7 @@ __pycache__/
 .ipynb_checkpoints/
 mlruns/
 .env
+
+artifacts/*.pkl
+
+mlflow.db

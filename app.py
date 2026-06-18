@@ -8,9 +8,9 @@ import hashlib
 import joblib
 import pandas as pd
 from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi import Body, Depends, FastAPI, HTTPException, status
 from fastapi.security import APIKeyHeader
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 
 load_dotenv()
@@ -83,6 +83,11 @@ class CustomerInput(BaseModel):
     contract: Literal["Month-to-month", "One year", "Two year"]
 
 
+class BatchPredictionResponse(BaseModel):
+    predictions: list[dict]
+    n_inputs: int
+
+
 app = FastAPI(title="Churn Prediction API", version="1.0")
 
 
@@ -129,6 +134,21 @@ def get_metrics():
     return metrics
 
 
+def _predict_customer(payload: CustomerInput) -> dict:
+    df = pd.DataFrame([payload.model_dump()])
+    df_encoded = pd.get_dummies(df, drop_first=True)
+    df_aligned = df_encoded.reindex(columns=feature_columns, fill_value=0)
+
+    prediction = model.predict(df_aligned)[0]
+    confidence = model.predict_proba(df_aligned)[0].max()
+
+    return {
+        "prediction": int(prediction),
+        "label": "churn" if prediction == 1 else "no_churn",
+        "confidence": float(confidence),
+    }
+
+
 @app.post("/predict", dependencies=[Depends(verify_api_token)])
 def predict(payload: CustomerInput):
     if model is None:
@@ -154,4 +174,53 @@ def predict(payload: CustomerInput):
     except Exception as e:
         metrics["n_errors"] += 1
         logger.error("Erreur pendant la prédiction : %s", e)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post(
+    "/predict_batch",
+    dependencies=[Depends(verify_api_token)],
+    response_model=BatchPredictionResponse,
+)
+def predict_batch(payload: dict = Body(...)):
+    if model is None:
+        metrics["n_errors"] += 1
+        raise HTTPException(status_code=500, detail="Modele indisponible")
+
+    inputs = payload.get("inputs")
+    if not isinstance(inputs, list):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="'inputs' must be a list",
+        )
+
+    if len(inputs) > 100:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail="Batch size is limited to 100 inputs",
+        )
+
+    validated_inputs = []
+    for index, item in enumerate(inputs):
+        try:
+            validated_inputs.append(CustomerInput.model_validate(item))
+        except ValidationError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={
+                    "message": f"Invalid input at index {index}",
+                    "index": index,
+                    "errors": e.errors(),
+                },
+            )
+
+    try:
+        predictions = [_predict_customer(item) for item in validated_inputs]
+        metrics["n_predictions"] += len(predictions)
+        logger.info("batch_predictions=%s", len(predictions))
+
+        return {"predictions": predictions, "n_inputs": len(validated_inputs)}
+    except Exception as e:
+        metrics["n_errors"] += 1
+        logger.error("Erreur pendant la prediction batch : %s", e)
         raise HTTPException(status_code=500, detail=str(e))
