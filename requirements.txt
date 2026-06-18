@@ -7,3 +7,4 @@ pydantic
 pytest
 httpx
 joblib
+python-dotenv

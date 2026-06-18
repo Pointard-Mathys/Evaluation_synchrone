@@ -1,17 +1,23 @@
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Literal
 
 import joblib
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import Depends, FastAPI, HTTPException, status
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel, Field
 
 
-API_TOKEN = "churn-demo-token"
+load_dotenv()
+
+API_TOKEN = os.getenv("API_TOKEN")
 MODEL_PATH = Path("artifacts/model.pkl")
 FEATURE_COLUMNS_PATH = Path("artifacts/feature_columns.json")
+api_key_header = APIKeyHeader(name="X-API-Token", auto_error=False)
 
 metrics = {
     "n_predictions": 0,
@@ -42,6 +48,19 @@ class CustomerInput(BaseModel):
 app = FastAPI(title="Churn Prediction API", version="1.0")
 
 
+def verify_api_token(api_token: str | None = Depends(api_key_header)):
+    if not API_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="API token is not configured",
+        )
+    if api_token != API_TOKEN:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid API token",
+        )
+
+
 @app.get("/")
 def root():
     return {"status": "ok"}
@@ -52,12 +71,12 @@ def health():
     return {"status": "healthy", "model_loaded": model is not None}
 
 
-@app.get("/metrics")
+@app.get("/metrics", dependencies=[Depends(verify_api_token)])
 def get_metrics():
     return metrics
 
 
-@app.post("/predict")
+@app.post("/predict", dependencies=[Depends(verify_api_token)])
 def predict(payload: CustomerInput):
     if model is None:
         metrics["n_errors"] += 1

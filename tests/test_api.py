@@ -13,6 +13,7 @@ class DummyModel:
 
 
 client = TestClient(api_app.app)
+AUTH_HEADERS = {"X-API-Token": "test-token"}
 
 
 def test_health_endpoint():
@@ -23,6 +24,7 @@ def test_health_endpoint():
 
 
 def test_predict_valid_input(monkeypatch):
+    monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
     monkeypatch.setattr(api_app, "model", DummyModel())
     monkeypatch.setattr(
         api_app,
@@ -42,13 +44,31 @@ def test_predict_valid_input(monkeypatch):
         "total_charges": 906.0,
         "contract": "Month-to-month",
     }
-    response = client.post("/predict", json=payload)
+    response = client.post("/predict", json=payload, headers=AUTH_HEADERS)
 
     assert response.status_code == 200
     assert "prediction" in response.json()
 
 
-def test_predict_rejects_missing_field():
+def test_predict_rejects_missing_token(monkeypatch):
+    monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
+
     response = client.post("/predict", json={"tenure_months": 12})
 
+    assert response.status_code == 401
+
+
+def test_predict_rejects_missing_field(monkeypatch):
+    monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
+
+    response = client.post("/predict", json={"tenure_months": 12}, headers=AUTH_HEADERS)
+
     assert response.status_code == 422
+
+
+def test_metrics_rejects_invalid_token(monkeypatch):
+    monkeypatch.setattr(api_app, "API_TOKEN", "test-token")
+
+    response = client.get("/metrics", headers={"X-API-Token": "wrong-token"})
+
+    assert response.status_code == 401
