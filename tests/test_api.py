@@ -16,11 +16,36 @@ client = TestClient(api_app.app)
 AUTH_HEADERS = {"X-API-Token": "test-token"}
 
 
-def test_health_endpoint():
+def test_health_endpoint(monkeypatch):
+    monkeypatch.setattr(api_app, "model", DummyModel())
+    monkeypatch.setattr(api_app, "feature_columns", ["tenure_months"])
+
     response = client.get("/health")
 
     assert response.status_code == 200
     assert response.json()["status"] == "healthy"
+
+
+def test_health_returns_503_when_model_is_missing(monkeypatch):
+    monkeypatch.setattr(api_app, "model", None)
+    monkeypatch.setattr(api_app, "feature_columns", ["tenure_months"])
+
+    response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["status"] == "unhealthy"
+    assert response.json()["detail"]["model_loaded"] is False
+
+
+def test_health_returns_503_when_feature_columns_are_missing(monkeypatch):
+    monkeypatch.setattr(api_app, "model", DummyModel())
+    monkeypatch.setattr(api_app, "feature_columns", [])
+
+    response = client.get("/health")
+
+    assert response.status_code == 503
+    assert response.json()["detail"]["status"] == "unhealthy"
+    assert response.json()["detail"]["feature_columns_loaded"] is False
 
 
 def test_predict_valid_input(monkeypatch):

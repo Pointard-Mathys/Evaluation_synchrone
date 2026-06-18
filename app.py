@@ -64,6 +64,7 @@ logger = logging.getLogger("churn-api")
 
 model = None
 feature_columns = []
+artifact_load_error = None
 
 try:
     _verify_model_integrity(MODEL_PATH, CHECKSUM_PATH)
@@ -71,6 +72,7 @@ try:
     with open(FEATURE_COLUMNS_PATH, "r", encoding="utf-8") as f:
         feature_columns = json.load(f)
 except Exception as e:
+    artifact_load_error = str(e)
     logger.error("Erreur au chargement des artefacts : %s", e)
 
 
@@ -104,7 +106,22 @@ def root():
 
 @app.get("/health")
 def health():
-    return {"status": "healthy", "model_loaded": model is not None}
+    if model is None or not feature_columns:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "status": "unhealthy",
+                "model_loaded": model is not None,
+                "feature_columns_loaded": bool(feature_columns),
+                "reason": "Artifacts unavailable",
+            },
+        )
+
+    return {
+        "status": "healthy",
+        "model_loaded": True,
+        "feature_columns_loaded": True,
+    }
 
 
 @app.get("/metrics", dependencies=[Depends(verify_api_token)])
